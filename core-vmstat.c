@@ -124,10 +124,10 @@ static int32_t raplstat_delay = 0;
 #if defined(__FreeBSD__) ||	\
     defined(__DragonFly__)
 /*
- *  freebsd_get_cpu_time()
+ *  freebsd_cpu_time_get()
  *	get user, system, idle times; FreeBSD variant
  */
-static void freebsd_get_cpu_time(
+static void freebsd_cpu_time_get(
 	uint64_t *user_time,
 	uint64_t *system_time,
 	uint64_t *idle_time)
@@ -165,10 +165,10 @@ static void freebsd_get_cpu_time(
 
 #if defined(__NetBSD__)
 /*
- *  freebsd_get_cpu_time()
+ *  freebsd_cpu_time_get()
  *	get user, system, idle times; NetBSD variant
  */
-static void netbsd_get_cpu_time(
+static void netbsd_cpu_time_get(
 	uint64_t *user_time,
 	uint64_t *system_time,
 	uint64_t *idle_time)
@@ -453,10 +453,10 @@ static void stress_read_iostat(const char *iostat_name, stress_iostat_t *iostat)
 	(iostat_current.field - iostat_prev.field) : 0)
 
 /*
- *  stress_get_iostat()
+ *  stress_iostat_get()
  *	read and compute delta since last read of iostats
  */
-static void stress_get_iostat(const char *iostat_name, stress_iostat_t *iostat)
+static void stress_iostat_get(const char *iostat_name, stress_iostat_t *iostat)
 {
 	static stress_iostat_t iostat_prev;
 	stress_iostat_t iostat_current;
@@ -717,7 +717,7 @@ static void stress_read_vmstat(stress_vmstat_t *vmstat)
 	vmstat->memory_free = (uint64_t)stress_bsd_getsysctl_uint32("vm.stats.vm.v_free_count");
 	vmstat->memory_cached = (uint64_t)stress_bsd_getsysctl_uint("vm.stats.vm.v_cache_count");
 
-	freebsd_get_cpu_time(&vmstat->user_time, &vmstat->system_time, &vmstat->idle_time);
+	freebsd_cpu_time_get(&vmstat->user_time, &vmstat->system_time, &vmstat->idle_time);
 
 #if defined(HAVE_SYS_VMMETER_H)
 	if (stress_bsd_getsysctl("vm.vmtotal", &t, sizeof(t)) == 0) {
@@ -739,7 +739,7 @@ static void stress_read_vmstat(stress_vmstat_t *vmstat)
 #if defined(HAVE_UVM_UVM_EXTERN_H)
 	struct uvmexp_sysctl u;
 #endif
-	netbsd_get_cpu_time(&vmstat->user_time, &vmstat->system_time, &vmstat->idle_time);
+	netbsd_cpu_time_get(&vmstat->user_time, &vmstat->system_time, &vmstat->idle_time);
 #if defined(HAVE_UVM_UVM_EXTERN_H)
 	if (stress_bsd_getsysctl("vm.uvmexp2", &u, sizeof(u)) == 0) {
 		vmstat->memory_cached = u.filepages;	/* Guess */
@@ -937,10 +937,10 @@ static void stress_read_vmstat(stress_vmstat_t *vmstat)
 	(vmstat_current.field - vmstat_prev.field) : 0)
 
 /*
- *  stress_get_vmstat()
+ *  stress_vmstat_get()
  *	collect vmstat data, zero for initial read
  */
-static void stress_get_vmstat(stress_vmstat_t *vmstat)
+static void stress_vmstat_get(stress_vmstat_t *vmstat)
 {
 	static stress_vmstat_t vmstat_prev;
 	stress_vmstat_t vmstat_current;
@@ -973,10 +973,10 @@ static void stress_get_vmstat(stress_vmstat_t *vmstat)
 
 #if defined(__linux__)
 /*
- *  stress_get_tz_info()
+ *  stress_tz_info_get()
  *	get temperature in degrees C from a thermal zone
  */
-static double stress_get_tz_info(const stress_tz_info_t *tz_info)
+static double stress_tz_info_get(const stress_tz_info_t *tz_info)
 {
 	double temp = 0.0;
 	FILE *fp;
@@ -1034,7 +1034,7 @@ void stress_vmstat_start(void)
 	stress_proc_name_set("stat [periodic]");
 
 	if (vmstat_delay)
-		stress_get_vmstat(&vmstat);
+		stress_vmstat_get(&vmstat);
 
 	if (thermalstat_delay) {
 		for (tz_info = g_shared->tz_info; tz_info; tz_info = tz_info->next)
@@ -1050,7 +1050,7 @@ void stress_vmstat_start(void)
 	if (stress_iostat_iostat_name(iostat_name, sizeof(iostat_name)) == NULL)
 		iostat_sleep = 0;
 	if (iostat_delay)
-		stress_get_iostat(iostat_name, &iostat);
+		stress_iostat_get(iostat_name, &iostat);
 #endif
 
 #if defined(SCHED_DEADLINE)
@@ -1108,7 +1108,7 @@ void stress_vmstat_start(void)
 			static uint32_t vmstat_count = 0;
 			double total_ticks, percent;
 
-			stress_get_vmstat(&vmstat);
+			stress_vmstat_get(&vmstat);
 
 			pr_block_begin();
 			if (vmstat_count == 0)
@@ -1194,7 +1194,7 @@ void stress_vmstat_start(void)
 
 #if defined(__linux__)
 				for (ptr = therms, tz_info = g_shared->tz_info; tz_info; tz_info = tz_info->next) {
-					(void)snprintf(ptr, 8, " %6.2f", stress_get_tz_info(tz_info));
+					(void)snprintf(ptr, 8, " %6.2f", stress_tz_info_get(tz_info));
 					ptr += 7;
 				}
 #endif
@@ -1220,7 +1220,7 @@ void stress_vmstat_start(void)
 			double clk_scale = (iostat_delay > 0) ? 1.0 / iostat_delay : 0.0;
 			static uint32_t iostat_count = 0;
 
-			stress_get_iostat(iostat_name, &iostat);
+			stress_iostat_get(iostat_name, &iostat);
 
 			pr_block_begin();
 			if (iostat_count == 0)

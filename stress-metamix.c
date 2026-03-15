@@ -360,12 +360,12 @@ static int stress_metamix(stress_args_t *args)
 	}
 	fs_type = stress_fs_type_get(temp_dir);
 
-	stress_mwc_get_seed(&w, &z);
+	stress_mwc_seed_get(&w, &z);
 
 	for (i = 0; i < METAMIX_PROCS; i++) {
 		register const uint32_t ui32 = (uint32_t)i;
 
-		(void)stress_mwc_set_seed(w ^ ui32, z + ui32);
+		(void)stress_mwc_seed_set(w ^ ui32, z + ui32);
 		(void)stress_mwc32();
 
 		stress_sync_start_init(&s_pids[i]);

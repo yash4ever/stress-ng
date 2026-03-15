@@ -215,7 +215,7 @@ typedef struct {
 	bool run_ok;			/* stressor run w/o issues */
 	bool force_killed;		/* true if sent SIGKILL */
 	bool padding;			/* padding */
-} stress_counter_info_t;
+} stress_counter_t;
 
 /* Shared mmap'd pages */
 typedef struct {
@@ -235,9 +235,9 @@ typedef struct {
 
 /*
  *  Metrics info, 1 per stressor, referenced by
- *  stress_stressor_t
+ *  stress_list_item_t
  */
-typedef struct stress_merics_info {
+typedef struct stress_metrics_info {
 	stress_metrics_desc_t *metrics_desc; /* per stressor metrics descriptions */
 	size_t num_metrics_items;	/* current number of metrics items */
 	size_t max_metrics_items;	/* maximum number of metrics items */
@@ -248,7 +248,7 @@ typedef struct stress_merics_info {
 typedef struct {
 	struct {
 		volatile uint64_t max_ops; /* max number of bogo ops */
-		stress_counter_info_t ci;  /* counter info struct */
+		stress_counter_t count;	/* counter info struct */
 		bool possibly_oom_killed;  /* was oom killed? */
 	} bogo;
 	const char *name;		/* stressor name */
@@ -263,10 +263,10 @@ typedef struct {
 } stress_args_t;
 
 /* Run-time stressor descriptor list */
-typedef struct stress_stressor_info {
-	struct stress_stressor_info *next; /* next proc info struct in list */
-	struct stress_stressor_info *prev; /* prev proc info struct in list */
-	const struct stress *stressor;	/* stressor */
+typedef struct stress_list_item {
+	struct stress_list_item *next;	/* next proc info struct in list */
+	struct stress_list_item *prev;	/* prev proc info struct in list */
+	const struct stress_stressor_t *stressor; /* stressor */
 	struct stress_stats **stats;	/* stressor stats info */
 	stress_metrics_info_t *metrics_info; /* per stressor metrics info */
 	int32_t completed_instances;	/* count of completed instances */
@@ -278,7 +278,7 @@ typedef struct stress_stressor_info {
 		bool	run;		/* ignore running the stressor, unsupported or excluded */
 		bool	permute;	/* ignore flag, saved for permute */
 	} ignore;
-} stress_stressor_t;
+} stress_list_item_t;
 
 #include "core-version.h"
 #include "core-attribute.h"
@@ -438,9 +438,9 @@ typedef struct {
  *  have got corrupted.
  */
 typedef struct {
-	stress_counter_info_t ci; 	/* Copy of stats counter info ci */
-	uint8_t	pad1[64 - sizeof(stress_counter_info_t)]; /* Padding */
-	uint32_t hash;			/* Hash of data */
+	stress_counter_t count; /* Copy of stats counter info  */
+	uint8_t	pad1[64 - sizeof(stress_counter_t)]; /* Padding */
+	uint32_t hash;		/* Hash of data */
 	uint8_t	pad2[64 - sizeof(uint32_t)]; /* Padding */
 } stress_checksum_t;
 
@@ -449,17 +449,17 @@ typedef struct {
  *  compiler does not compile away calculations
  */
 typedef union {
-	volatile uint8_t	uint8_val;
-	volatile uint16_t	uint16_val;
-	volatile uint32_t	uint32_val;
-	volatile uint64_t	uint64_val;
+	volatile void 		*void_ptr_val;
+	volatile long double	long_double_val;
+	volatile double		double_val;
+	volatile float		float_val;
 #if defined(HAVE_INT128_T)
 	volatile __uint128_t	uint128_val;
 #endif
-	volatile float		float_val;
-	volatile double		double_val;
-	volatile long double	long_double_val;
-	volatile void 		*void_ptr_val;
+	volatile uint64_t	uint64_val;
+	volatile uint32_t	uint32_val;
+	volatile uint16_t	uint16_val;
+	volatile uint8_t	uint8_val;
 } stress_put_val_t;
 
 typedef uint32_t stress_class_t;
@@ -483,8 +483,8 @@ typedef struct stressor_info {
 	int (*supported)(const char *name);	/* return 0 = supported, -1, not */
 	void (*init)(const uint32_t instances); /* stressor init, NULL = ignore */
 	void (*deinit)(void);		/* stressor de-init, NULL = ignore */
-	void (*set_default)(void);	/* default set-up */
-	void (*set_limit)(uint64_t max);/* set limits */
+	void (*default_set)(void);	/* default set-up */
+	void (*limit_set)(uint64_t max);/* set limits */
 	const stress_opt_t *opts;	/* new option settings */
 	const stress_help_t *help;	/* stressor help options */
 	const stress_class_t classifier;/* stressor class */
@@ -597,7 +597,7 @@ typedef struct {
 /* Per stressor statistics and accounting info */
 typedef struct stress_stats {
 	struct stress_stats *hash_next;	/* next stats in hash table */
-	stress_stressor_t *ss;		/* stressor that this belongs to */
+	stress_list_item_t *item;	/* stressor list item this belongs to */
 	stress_args_t args;		/* stressor args */
 	double start;			/* wall clock start time */
 	double duration;		/* finish - start */
@@ -666,9 +666,9 @@ typedef struct {
 	struct {
 		uint8_t	*buffer;	/* Shared memory cache buffer */
 		uint64_t size;		/* buffer size in bytes */
+		uint32_t ways;		/* cache ways size */
 		uint16_t level;		/* 1=L1, 2=L2, 3=L3 */
 		uint16_t padding1;	/* alignment padding */
-		uint32_t ways;		/* cache ways size */
 	} mem_cache;
 	struct {
 		uint32_t hash[STRESS_WARN_HASH_MAX]; /* hash patterns */
@@ -702,8 +702,8 @@ typedef struct {
 #endif
 #if defined(STRESS_PERF_STATS)
 	struct {
-		bool no_perf;		/* true = Perf not available */
 		void *lock;		/* lock on no_perf updates */
+		bool no_perf;		/* true = Perf not available */
 	} perf;
 #endif
 #if defined(STRESS_THERMAL_ZONES)
@@ -728,20 +728,22 @@ typedef struct {
 	struct {
 		uint32_t ready;		/* incremented when rawsock stressor is ready */
 	} rawsock;
-	void *metrics_lock;		/* metrics lock */
+	struct {
+		void *lock;		/* metrics lock */
+	} metrics;
 	stress_stats_t stats[];		/* Shared statistics */
 } stress_shared_t;
 
 /* stress test metadata */
-typedef struct stress {
+typedef struct stress_stressor_t {
 	const stressor_info_t *info;	/* stress test info */
 	const short int short_getopt;	/* getopt short option */
 	const stress_op_t op;		/* ops option */
 	char name[16];			/* stressor function name */
-} stress_t;
+} stress_stressor_t;
 
-/* Pointer to current running stressor proc info */
-extern stress_stressor_t *g_stressor_current;
+/* Pointer to current running stressor */
+extern stress_list_item_t *g_item_current;
 
 /* Various global option settings and flags */
 extern const char g_prog_name[];	/* Name of programme */
@@ -753,7 +755,7 @@ extern volatile bool g_stress_continue_flag; /* false to exit stressor */
 extern jmp_buf g_error_env;		/* parsing error env */
 extern void *g_nowt;			/* void pointer to NULL */
 
-extern void stress_zero_bogo_max_ops(void);
+extern void stress_bogo_max_ops_zero(void);
 
 /*
  *  stress_continue_flag()
@@ -772,7 +774,7 @@ static inline void ALWAYS_INLINE stress_continue_set_flag(const bool setting)
 {
 	g_stress_continue_flag = setting;
 	if (!setting)
-		stress_zero_bogo_max_ops();
+		stress_bogo_max_ops_zero();
 }
 
 /*
@@ -785,11 +787,11 @@ static inline void ALWAYS_INLINE stress_continue_set_flag(const bool setting)
  */
 static inline void ALWAYS_INLINE stress_bogo_add(stress_args_t *args, const uint64_t inc)
 {
-	args->bogo.ci.counter_ready = false;
+	args->bogo.count.counter_ready = false;
 	stress_asm_mb();
-	args->bogo.ci.counter += inc;
+	args->bogo.count.counter += inc;
 	stress_asm_mb();
-	args->bogo.ci.counter_ready = true;
+	args->bogo.count.counter_ready = true;
 }
 
 /*
@@ -802,11 +804,11 @@ static inline void ALWAYS_INLINE stress_bogo_add(stress_args_t *args, const uint
  */
 static inline void ALWAYS_INLINE stress_bogo_inc(stress_args_t *args)
 {
-	args->bogo.ci.counter_ready = false;
+	args->bogo.count.counter_ready = false;
 	stress_asm_mb();
-	args->bogo.ci.counter++;
+	args->bogo.count.counter++;
 	stress_asm_mb();
-	args->bogo.ci.counter_ready = true;
+	args->bogo.count.counter_ready = true;
 }
 
 /*
@@ -815,7 +817,7 @@ static inline void ALWAYS_INLINE stress_bogo_inc(stress_args_t *args)
  */
 static inline uint64_t ALWAYS_INLINE stress_bogo_get(stress_args_t *args)
 {
-	return args->bogo.ci.counter;
+	return args->bogo.count.counter;
 }
 
 /*
@@ -824,7 +826,7 @@ static inline uint64_t ALWAYS_INLINE stress_bogo_get(stress_args_t *args)
  */
 static inline void ALWAYS_INLINE stress_bogo_ready(stress_args_t *args)
 {
-	args->bogo.ci.counter_ready = true;
+	args->bogo.count.counter_ready = true;
 }
 
 /*
@@ -837,11 +839,11 @@ static inline void ALWAYS_INLINE stress_bogo_ready(stress_args_t *args)
  */
 static inline void ALWAYS_INLINE stress_bogo_set(stress_args_t *args, const uint64_t val)
 {
-	args->bogo.ci.counter_ready = false;
+	args->bogo.count.counter_ready = false;
 	stress_asm_mb();
-	args->bogo.ci.counter = val;
+	args->bogo.count.counter = val;
 	stress_asm_mb();
-	args->bogo.ci.counter_ready = true;
+	args->bogo.count.counter_ready = true;
 }
 
 /*
@@ -852,14 +854,14 @@ static inline void ALWAYS_INLINE stress_bogo_set(stress_args_t *args, const uint
  */
 static inline void ALWAYS_INLINE stress_force_killed_bogo(stress_args_t *args)
 {
-	args->bogo.ci.force_killed = true;
+	args->bogo.count.force_killed = true;
 }
 
 /*
  *  stress_continue()
  *      returns true if we can keep on running a stressor
  */
-#define stress_continue(args) 	LIKELY(args->bogo.ci.counter < args->bogo.max_ops)
+#define stress_continue(args) 	LIKELY(args->bogo.count.counter < args->bogo.max_ops)
 
 /*
  *  stress_bogo_add_lock()
@@ -920,10 +922,10 @@ static inline bool ALWAYS_INLINE stress_instance_zero(stress_args_t *args)
 #define STRESS_METRIC_TOTAL		(0x3)
 #define STRESS_METRIC_MAXIMUM		(0x4)
 
-extern WARN_UNUSED int stress_parse_opts(int argc, char **argv, const bool jobmode);
+extern WARN_UNUSED int stress_opts_parse(int argc, char **argv, const bool jobmode);
 extern void stress_shared_readonly(void);
 extern void stress_shared_unmap(void);
-extern void stress_log_system_mem_info(void);
+extern void stress_system_memory_info_log(void);
 extern void stress_metrics_set(stress_args_t *args, const char *description,
 	const double value, const int mean_type);
 extern WARN_UNUSED ssize_t stress_stressor_find(const char *name);

@@ -1283,7 +1283,7 @@ case_stream_index_1:
 		break;
 	}
 
-	stress_mwc_get_seed(&w, &z);
+	stress_mwc_seed_get(&w, &z);
 
 	init_counter = 0;
 	init_counter_max = verify ? 1 : 64;
@@ -1302,7 +1302,7 @@ case_stream_index_1:
 	dt = 0.0;
 	do {
 		if (init_counter == 0) {
-			stress_mwc_set_seed(w, z);
+			stress_mwc_seed_set(w, z);
 			stress_stream_init_data(a, b, c, n);
 		}
 		init_counter++;
