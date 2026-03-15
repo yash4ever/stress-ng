@@ -236,7 +236,7 @@ static int get_modpath_name(
 			}
 			(void)shim_strscpy(module_path_truncated, module_pathp, sizeof(module_path_truncated));
 
-			/* basename can modify the the original string */
+			/* basename can modify the original string */
 			modulenamep = basename(module_path_truncated);
 			(void)shim_strscpy(module_path_basename, modulenamep, sizeof(module_path_basename));
 
